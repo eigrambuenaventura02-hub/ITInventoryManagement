@@ -1,0 +1,10 @@
+{
+  "description": "Efficiently manage IT inventory and assets with real-time tracking, streamlined organization, and reporting tools for IT professionals and businesses.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
