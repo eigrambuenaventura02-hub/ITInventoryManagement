@@ -21,8 +21,8 @@ interface Asset {
 
 // Demo credentials — replace with real auth in production
 const ADMIN_CREDENTIALS = [
-  { username: 'admin', password: 'admin123', name: 'System Administrator', role: 'SUPER_ADMIN' },
-  { username: 'itops', password: 'itops2026', name: 'IT Operations', role: 'IT_ADMIN' },
+  { username: 'admin', password: 'M@dinam3t', name: 'System Administrator', role: 'SUPER_ADMIN' },
+  { username: 'eigram', password: 'ddcbf38ejb', name: 'IT Operations', role: 'IT_ADMIN' },
 ]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
@@ -49,7 +49,7 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
       if (match) {
         onLogin(match.name, match.role)
       } else {
-        setError('Invalid credentials. Access denied.')
+        setError('Invalid credentials. Access denied. Please Contact Eigram')
         setShake(true)
         setPassword('')
         setTimeout(() => setShake(false), 600)
@@ -189,10 +189,9 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
           </form>
 
           <div className="mt-8 pt-6 border-t border-zinc-800">
-            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#444', lineHeight: 1.7 }}>
-              Demo credentials:<br />
-              <span style={{ color: '#666' }}>admin / admin123</span><br />
-              <span style={{ color: '#666' }}>itops / itops2026</span>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#FF0000', lineHeight: 1.7 }}>
+              Please Contact Admin for Credentials<br />
+              
             </p>
           </div>
         </div>
