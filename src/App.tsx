@@ -21,8 +21,10 @@ interface Asset {
 
 // Demo credentials — replace with real auth in production
 const ADMIN_CREDENTIALS = [
-  { username: 'admin', password: 'M@dinam3t', name: 'System Administrator', role: 'SUPER_ADMIN' },
-  { username: 'eigram', password: 'ddcbf38ejb', name: 'IT Operations', role: 'IT_ADMIN' },
+  { username: 'eigram', password: 'ddcbf38ejb', name: 'System Administrator', role: 'SUPER_ADMIN' },
+  { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
+  { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
+  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' }
 ]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
@@ -76,7 +78,7 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
             ◈ RESTRICTED ACCESS
           </div>
           <h2 style={{ fontSize: 42, fontWeight: 700, color: '#F4F3EF', lineHeight: 1.1, marginBottom: 20 }}>
-            Admin<br />Portal
+            NMS IT Admin<br />Portal
           </h2>
           <p style={{ fontSize: 14, color: '#6B6B6B', lineHeight: 1.7, maxWidth: 340 }}>
             Authorized personnel only. All access attempts are logged and monitored. Unauthorized access is a violation of company policy.
@@ -107,7 +109,7 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-10 md:hidden">
             <div className="w-9 h-9 bg-[#FF3B00] flex items-center justify-center">
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 13, color: '#fff' }}>NMS IT</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 13, color: '#fff' }}>IT</span>
             </div>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#6B6B6B', letterSpacing: '0.12em' }}>ASSET_INVENTORY</span>
           </div>
@@ -229,6 +231,7 @@ const ASSETS: Asset[] = [
   { id: 'LIC-0001', name: 'Microsoft 365 Business', category: 'License', assignedTo: null, department: 'All', status: 'Active', location: '—', serial: 'MS365-ENT-2025-55STS', purchaseDate: '2025-07-01', lastUpdated: '2026-07-01', cost: 16500, vendor: 'Microsoft' },
   { id: 'LIC-0002', name: 'Slack Pro (75 seats)', category: 'License', assignedTo: null, department: 'All', status: 'Active', location: '—', serial: 'SLK-PRO-0293-Q3', purchaseDate: '2026-04-01', lastUpdated: '2026-07-01', cost: 6750, vendor: 'Salesforce / Slack' },
   { id: 'LIC-0003', name: 'GitHub Enterprise', category: 'License', assignedTo: null, department: 'Engineering', status: 'Active', location: '—', serial: 'GH-ENT-ORGK-0488', purchaseDate: '2026-01-01', lastUpdated: '2026-07-01', cost: 9600, vendor: 'GitHub' },
+  { id: 'LIC-0004', name: 'PornHubVIP', category: 'License', assignedTo: 'Kenshin', department: 'IT', status: 'Active', location: 'Baguio City', serial: 'PH-WEB-ORGST-0188', purchaseDate: '2026-08-02', lastUpdated: '2026-08-05', cost: 2500, vendor: 'PORNHUB' },
   { id: 'NET-0001', name: 'Ubiquiti UniFi AP U7', category: 'Network', assignedTo: null, department: 'IT', status: 'Active', location: 'NYC HQ — Floor 3', serial: 'UB7X2QN4K091', purchaseDate: '2025-03-10', lastUpdated: '2026-06-20', cost: 279, vendor: 'Ubiquiti' },
   { id: 'MOB-0007', name: 'iPad Pro 13in M4', category: 'Mobile', assignedTo: 'Marcus Webb', department: 'Sales', status: 'Active', location: 'Remote — Chicago', serial: 'IPAD13M4NZQ04', purchaseDate: '2024-09-20', lastUpdated: '2026-07-10', cost: 1299, vendor: 'Apple Inc.' },
 ]
