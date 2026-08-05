@@ -107,7 +107,7 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-10 md:hidden">
             <div className="w-9 h-9 bg-[#FF3B00] flex items-center justify-center">
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 13, color: '#fff' }}>IT</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 13, color: '#fff' }}>NMS IT</span>
             </div>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#6B6B6B', letterSpacing: '0.12em' }}>ASSET_INVENTORY</span>
           </div>
