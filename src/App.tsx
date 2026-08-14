@@ -24,7 +24,8 @@ const ADMIN_CREDENTIALS = [
   { username: 'eigram', password: 'ddcbf38ejb', name: 'System Administrator', role: 'SUPER_ADMIN' },
   { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
   { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
-  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' }
+  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
+  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' }
 ]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
@@ -234,6 +235,7 @@ const ASSETS: Asset[] = [
   { id: 'LIC-0004', name: 'PornHubVIP', category: 'License', assignedTo: 'Kenshin', department: 'IT', status: 'Active', location: 'Baguio City', serial: 'PH-WEB-ORGST-0188', purchaseDate: '2026-08-02', lastUpdated: '2026-08-05', cost: 2500, vendor: 'PORNHUB' },
   { id: 'NET-0001', name: 'Ubiquiti UniFi AP U7', category: 'Network', assignedTo: null, department: 'IT', status: 'Active', location: 'NYC HQ — Floor 3', serial: 'UB7X2QN4K091', purchaseDate: '2025-03-10', lastUpdated: '2026-06-20', cost: 279, vendor: 'Ubiquiti' },
   { id: 'MOB-0007', name: 'iPad Pro 13in M4', category: 'Mobile', assignedTo: 'Marcus Webb', department: 'Sales', status: 'Active', location: 'Remote — Chicago', serial: 'IPAD13M4NZQ04', purchaseDate: '2024-09-20', lastUpdated: '2026-07-10', cost: 1299, vendor: 'Apple Inc.' },
+  { id: 'LIC-0005', name: 'PinayFlix Subscription', category: 'License', assignedTo: 'Vinz', department: 'Maintenance', status: 'Active', location: 'Tondo Manila', serial: 'PH-NET-GRST-01525', purchaseDate: '2026-08-14', lastUpdated: '2026-08-14', cost: 1300, vendor: 'PinayFlix.net' },
 ]
 
 const STATUS_STYLES: Record<Status, { bg: string; text: string; dot: string }> = {
