@@ -1,0 +1,151 @@
+import express from 'express'
+import cors from 'cors'
+import mysql from 'mysql2/promise'
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+const app = express()
+const port = process.env.PORT || 4000
+
+app.use(cors())
+app.use(express.json())
+
+const dbConfig = {
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'it_inventory',
+  waitForConnections: true,
+  connectionLimit: 10,
+}
+
+const pool = mysql.createPool(dbConfig)
+
+function dateOnly(value) {
+  return String(value).slice(0, 10)
+}
+
+const createTableSql = `
+  CREATE TABLE IF NOT EXISTS assets (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    assignedTo VARCHAR(255),
+    department VARCHAR(255),
+    status VARCHAR(50) NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    serial VARCHAR(255) NOT NULL,
+    purchaseDate DATE NOT NULL,
+    lastUpdated DATE NOT NULL,
+    cost DECIMAL(12,2) NOT NULL,
+    vendor VARCHAR(255) NOT NULL
+  )
+`
+
+const seedAssets = [
+  ['HW-0041', 'MacBook Pro 16in M3', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'C02ZN4XZMD6T', '2024-02-14', '2026-07-28', 3499, 'Apple Inc.'],
+  ['HW-0042', 'Dell UltraSharp 27in 4K', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'DL7X92KQ3814', '2024-02-14', '2026-07-28', 899, 'Dell Technologies'],
+  ['HW-0043', 'ThinkPad X1 Carbon', 'Hardware', 'Marcus Webb', 'Sales', 'Active', 'Remote — Chicago', 'PC3KN7ZL0092', '2023-11-30', '2026-07-15', 2199, 'Lenovo'],
+  ['HW-0044', 'HP EliteDesk 800 G6', 'Hardware', null, null, 'Available', 'NYC HQ — Storage', 'HP9QK2MZ7731', '2023-06-01', '2026-05-20', 1450, 'HP Inc.'],
+  ['HW-0045', 'MacBook Air 13in M2', 'Hardware', 'Priya Nair', 'Design', 'Active', 'NYC HQ — Floor 3', 'C02ZP1ABMD6T', '2024-05-10', '2026-07-30', 1299, 'Apple Inc.'],
+  ['HW-0046', 'Cisco Catalyst 9200', 'Network', null, 'IT', 'Active', 'NYC HQ — Server Room', 'CSC2X4NQKR81', '2022-09-15', '2026-07-01', 4800, 'Cisco Systems'],
+  ['HW-0047', 'iPhone 15 Pro', 'Mobile', 'Jordan Kim', 'Executive', 'Active', 'Remote — LA', 'IP15PNZK0034', '2024-01-08', '2026-07-22', 999, 'Apple Inc.'],
+  ['HW-0048', 'Synology NAS DS923+', 'Hardware', null, 'IT', 'Maintenance', 'NYC HQ — Server Room', 'SY9RL3VQ2201', '2023-04-20', '2026-08-01', 1800, 'Synology'],
+  ['HW-0049', 'Logitech MX Keys S', 'Hardware', 'Tyler Brooks', 'Operations', 'Active', 'NYC HQ — Floor 2', 'LG4XN8WZ0055', '2025-01-15', '2026-06-10', 109, 'Logitech'],
+  ['HW-0050', 'Dell Precision 5570', 'Hardware', null, null, 'Retired', 'NYC HQ — Storage', 'DL2Q7YN4K011', '2020-03-10', '2026-02-28', 2800, 'Dell Technologies'],
+  ['SW-0011', 'Adobe Creative Cloud', 'Software', 'Priya Nair', 'Design', 'Active', '—', 'ADO-CC-7X4N-2024', '2024-11-01', '2026-07-01', 659, 'Adobe Inc.'],
+  ['SW-0012', 'JetBrains All Products', 'Software', 'Sarah Chen', 'Engineering', 'Active', '—', 'JB-ALL-EN-8814', '2025-02-01', '2026-07-01', 779, 'JetBrains'],
+  ['SW-0013', 'Figma Organization', 'Software', null, 'Design', 'Active', '—', 'FIG-ORG-2025-0112', '2025-01-01', '2026-07-01', 4200, 'Figma, Inc.'],
+  ['LIC-0001', 'Microsoft 365 Business', 'License', null, 'All', 'Active', '—', 'MS365-ENT-2025-55STS', '2025-07-01', '2026-07-01', 16500, 'Microsoft'],
+  ['LIC-0002', 'Slack Pro (75 seats)', 'License', null, 'All', 'Active', '—', 'SLK-PRO-0293-Q3', '2026-04-01', '2026-07-01', 6750, 'Salesforce / Slack'],
+  ['LIC-0003', 'GitHub Enterprise', 'License', null, 'Engineering', 'Active', '—', 'GH-ENT-ORGK-0488', '2026-01-01', '2026-07-01', 9600, 'GitHub'],
+  ['NET-0001', 'Ubiquiti UniFi AP U7', 'Network', null, 'IT', 'Active', 'NYC HQ — Floor 3', 'UB7X2QN4K091', '2025-03-10', '2026-06-20', 279, 'Ubiquiti'],
+  ['MOB-0007', 'iPad Pro 13in M4', 'Mobile', 'Marcus Webb', 'Sales', 'Active', 'Remote — Chicago', 'IPAD13M4NZQ04', '2024-09-20', '2026-07-10', 1299, 'Apple Inc.'],
+]
+
+async function ensureDatabase() {
+  try {
+    const connection = await pool.getConnection()
+    await connection.query(createTableSql)
+
+    const [rows] = await connection.query('SELECT COUNT(*) AS total FROM assets')
+    const total = Number(rows[0].total)
+
+    if (total === 0) {
+      const sql = `
+        INSERT INTO assets (id, name, category, assignedTo, department, status, location, serial, purchaseDate, lastUpdated, cost, vendor)
+        VALUES ?
+      `
+      await connection.query(sql, [seedAssets])
+    }
+
+    connection.release()
+  } catch (error) {
+    console.error('Database initialization failed:', error)
+    process.exit(1)
+  }
+}
+
+app.get('/api/assets', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM assets ORDER BY id ASC')
+    res.json({ assets: rows })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch assets from database.', error: String(error) })
+  }
+})
+
+app.post('/api/assets', async (req, res) => {
+  try {
+    const assets = Array.isArray(req.body?.assets) ? req.body.assets : []
+
+    if (!assets.length) {
+      return res.status(400).json({ message: 'No assets were provided.' })
+    }
+
+    const sql = `
+      INSERT INTO assets (id, name, category, assignedTo, department, status, location, serial, purchaseDate, lastUpdated, cost, vendor)
+      VALUES ?
+      ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
+        category = VALUES(category),
+        assignedTo = VALUES(assignedTo),
+        department = VALUES(department),
+        status = VALUES(status),
+        location = VALUES(location),
+        serial = VALUES(serial),
+        purchaseDate = VALUES(purchaseDate),
+        lastUpdated = VALUES(lastUpdated),
+        cost = VALUES(cost),
+        vendor = VALUES(vendor)
+    `
+
+    const values = assets.map(asset => [
+      asset.id,
+      asset.name,
+      asset.category,
+      asset.assignedTo,
+      asset.department,
+      asset.status,
+      asset.location,
+      asset.serial,
+      dateOnly(asset.purchaseDate),
+      dateOnly(asset.lastUpdated),
+      asset.cost,
+      asset.vendor,
+    ])
+
+    await pool.query(sql, [values])
+    res.json({ message: 'Assets saved successfully.' })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to save assets.', error: String(error) })
+  }
+})
+
+await ensureDatabase()
+
+app.listen(port, () => {
+  console.log(`MySQL inventory API running on http://localhost:${port}`)
+})

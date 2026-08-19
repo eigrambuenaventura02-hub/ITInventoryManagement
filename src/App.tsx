@@ -1,23 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { DEFAULT_ASSETS, initializeInventoryDb, saveAssets, type Asset, type Category, type Status } from './inventoryDb'
 
-type Category = 'Hardware' | 'Software' | 'License' | 'Network' | 'Mobile'
-type Status = 'Active' | 'Maintenance' | 'Available' | 'Retired'
 type Tab = 'All' | Category
-
-interface Asset {
-  id: string
-  name: string
-  category: Category
-  assignedTo: string | null
-  department: string | null
-  status: Status
-  location: string
-  serial: string
-  purchaseDate: string
-  lastUpdated: string
-  cost: number
-  vendor: string
-}
 
 // Demo credentials — replace with real auth in production
 const ADMIN_CREDENTIALS = [
@@ -215,29 +199,6 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
   )
 }
 
-const ASSETS: Asset[] = [
-  { id: 'HW-0041', name: 'MacBook Pro 16in M3', category: 'Hardware', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: 'NYC HQ — Floor 4', serial: 'C02ZN4XZMD6T', purchaseDate: '2024-02-14', lastUpdated: '2026-07-28', cost: 3499, vendor: 'Apple Inc.' },
-  { id: 'HW-0042', name: 'Dell UltraSharp 27in 4K', category: 'Hardware', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: 'NYC HQ — Floor 4', serial: 'DL7X92KQ3814', purchaseDate: '2024-02-14', lastUpdated: '2026-07-28', cost: 899, vendor: 'Dell Technologies' },
-  { id: 'HW-0043', name: 'ThinkPad X1 Carbon', category: 'Hardware', assignedTo: 'Marcus Webb', department: 'Sales', status: 'Active', location: 'Remote — Chicago', serial: 'PC3KN7ZL0092', purchaseDate: '2023-11-30', lastUpdated: '2026-07-15', cost: 2199, vendor: 'Lenovo' },
-  { id: 'HW-0044', name: 'HP EliteDesk 800 G6', category: 'Hardware', assignedTo: null, department: null, status: 'Available', location: 'NYC HQ — Storage', serial: 'HP9QK2MZ7731', purchaseDate: '2023-06-01', lastUpdated: '2026-05-20', cost: 1450, vendor: 'HP Inc.' },
-  { id: 'HW-0045', name: 'MacBook Air 13in M2', category: 'Hardware', assignedTo: 'Priya Nair', department: 'Design', status: 'Active', location: 'NYC HQ — Floor 3', serial: 'C02ZP1ABMD6T', purchaseDate: '2024-05-10', lastUpdated: '2026-07-30', cost: 1299, vendor: 'Apple Inc.' },
-  { id: 'HW-0046', name: 'Cisco Catalyst 9200', category: 'Network', assignedTo: null, department: 'IT', status: 'Active', location: 'NYC HQ — Server Room', serial: 'CSC2X4NQKR81', purchaseDate: '2022-09-15', lastUpdated: '2026-07-01', cost: 4800, vendor: 'Cisco Systems' },
-  { id: 'HW-0047', name: 'iPhone 15 Pro', category: 'Mobile', assignedTo: 'Jordan Kim', department: 'Executive', status: 'Active', location: 'Remote — LA', serial: 'IP15PNZK0034', purchaseDate: '2024-01-08', lastUpdated: '2026-07-22', cost: 999, vendor: 'Apple Inc.' },
-  { id: 'HW-0048', name: 'Synology NAS DS923+', category: 'Hardware', assignedTo: null, department: 'IT', status: 'Maintenance', location: 'NYC HQ — Server Room', serial: 'SY9RL3VQ2201', purchaseDate: '2023-04-20', lastUpdated: '2026-08-01', cost: 1800, vendor: 'Synology' },
-  { id: 'HW-0049', name: 'Logitech MX Keys S', category: 'Hardware', assignedTo: 'Tyler Brooks', department: 'Operations', status: 'Active', location: 'NYC HQ — Floor 2', serial: 'LG4XN8WZ0055', purchaseDate: '2025-01-15', lastUpdated: '2026-06-10', cost: 109, vendor: 'Logitech' },
-  { id: 'HW-0050', name: 'Dell Precision 5570', category: 'Hardware', assignedTo: null, department: null, status: 'Retired', location: 'NYC HQ — Storage', serial: 'DL2Q7YN4K011', purchaseDate: '2020-03-10', lastUpdated: '2026-02-28', cost: 2800, vendor: 'Dell Technologies' },
-  { id: 'SW-0011', name: 'Adobe Creative Cloud', category: 'Software', assignedTo: 'Priya Nair', department: 'Design', status: 'Active', location: '—', serial: 'ADO-CC-7X4N-2024', purchaseDate: '2024-11-01', lastUpdated: '2026-07-01', cost: 659, vendor: 'Adobe Inc.' },
-  { id: 'SW-0012', name: 'JetBrains All Products', category: 'Software', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: '—', serial: 'JB-ALL-EN-8814', purchaseDate: '2025-02-01', lastUpdated: '2026-07-01', cost: 779, vendor: 'JetBrains' },
-  { id: 'SW-0013', name: 'Figma Organization', category: 'Software', assignedTo: null, department: 'Design', status: 'Active', location: '—', serial: 'FIG-ORG-2025-0112', purchaseDate: '2025-01-01', lastUpdated: '2026-07-01', cost: 4200, vendor: 'Figma, Inc.' },
-  { id: 'LIC-0001', name: 'Microsoft 365 Business', category: 'License', assignedTo: null, department: 'All', status: 'Active', location: '—', serial: 'MS365-ENT-2025-55STS', purchaseDate: '2025-07-01', lastUpdated: '2026-07-01', cost: 16500, vendor: 'Microsoft' },
-  { id: 'LIC-0002', name: 'Slack Pro (75 seats)', category: 'License', assignedTo: null, department: 'All', status: 'Active', location: '—', serial: 'SLK-PRO-0293-Q3', purchaseDate: '2026-04-01', lastUpdated: '2026-07-01', cost: 6750, vendor: 'Salesforce / Slack' },
-  { id: 'LIC-0003', name: 'GitHub Enterprise', category: 'License', assignedTo: null, department: 'Engineering', status: 'Active', location: '—', serial: 'GH-ENT-ORGK-0488', purchaseDate: '2026-01-01', lastUpdated: '2026-07-01', cost: 9600, vendor: 'GitHub' },
-  { id: 'LIC-0004', name: 'PornHubVIP', category: 'License', assignedTo: 'Kenshin', department: 'IT', status: 'Active', location: 'Baguio City', serial: 'PH-WEB-ORGST-0188', purchaseDate: '2026-08-02', lastUpdated: '2026-08-05', cost: 2500, vendor: 'PORNHUB' },
-  { id: 'NET-0001', name: 'Ubiquiti UniFi AP U7', category: 'Network', assignedTo: null, department: 'IT', status: 'Active', location: 'NYC HQ — Floor 3', serial: 'UB7X2QN4K091', purchaseDate: '2025-03-10', lastUpdated: '2026-06-20', cost: 279, vendor: 'Ubiquiti' },
-  { id: 'MOB-0007', name: 'iPad Pro 13in M4', category: 'Mobile', assignedTo: 'Marcus Webb', department: 'Sales', status: 'Active', location: 'Remote — Chicago', serial: 'IPAD13M4NZQ04', purchaseDate: '2024-09-20', lastUpdated: '2026-07-10', cost: 1299, vendor: 'Apple Inc.' },
-  { id: 'LIC-0005', name: 'PinayFlix Subscription', category: 'License', assignedTo: 'Vinz', department: 'Maintenance', status: 'Active', location: 'Tondo Manila', serial: 'PH-NET-GRST-01525', purchaseDate: '2026-08-14', lastUpdated: '2026-08-14', cost: 1300, vendor: 'PinayFlix.net' },
-]
-
 const STATUS_STYLES: Record<Status, { bg: string; text: string; dot: string }> = {
   Active: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   Available: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
@@ -265,7 +226,78 @@ const NAV_ITEMS = [
 
 type SortKey = keyof Pick<Asset, 'id' | 'name' | 'category' | 'status' | 'lastUpdated' | 'cost'>
 
+const EMPTY_ASSET: Asset = {
+  id: '', name: '', category: 'Hardware', assignedTo: null, department: null,
+  status: 'Available', location: '', serial: '',
+  purchaseDate: new Date().toISOString().slice(0, 10),
+  lastUpdated: new Date().toISOString().slice(0, 10), cost: 0, vendor: '',
+}
+
+function AddAssetModal({ onClose, onSave }: { onClose: () => void; onSave: (asset: Asset) => Promise<void> }) {
+  const [form, setForm] = useState<Asset>(EMPTY_ASSET)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function updateField<K extends keyof Asset>(field: K, value: Asset[K]) {
+    setForm(current => ({ ...current, [field]: value }))
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      await onSave({
+        ...form,
+        id: form.id.trim(), name: form.name.trim(), location: form.location.trim(),
+        serial: form.serial.trim(), vendor: form.vendor.trim(),
+        assignedTo: form.assignedTo?.trim() || null, department: form.department?.trim() || null,
+      })
+      onClose()
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save this asset.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const textFields: { field: keyof Asset; label: string; required?: boolean }[] = [
+    { field: 'id', label: 'ASSET ID', required: true }, { field: 'name', label: 'NAME', required: true },
+    { field: 'assignedTo', label: 'ASSIGNED TO' }, { field: 'department', label: 'DEPARTMENT' },
+    { field: 'location', label: 'LOCATION', required: true }, { field: 'serial', label: 'SERIAL', required: true },
+    { field: 'vendor', label: 'VENDOR', required: true },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
+      <form onSubmit={handleSubmit} onMouseDown={event => event.stopPropagation()} className="w-full max-w-2xl max-h-[90vh] overflow-y-auto border-2 border-black bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between border-b-2 border-black pb-4">
+          <div><div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#FF3B00', letterSpacing: '0.1em' }}>INVENTORY_DATABASE</div><h2 style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 18, fontWeight: 700, marginTop: 4 }}>ADD ASSET</h2></div>
+          <button type="button" onClick={onClose} className="text-2xl leading-none text-gray-500 hover:text-black" aria-label="Close">×</button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {textFields.map(({ field, label, required }) => (
+            <label key={field} className="flex flex-col gap-1">
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666', letterSpacing: '0.08em' }}>{label}{required ? ' *' : ''}</span>
+              <input required={required} value={String(form[field] ?? '')} onChange={event => updateField(field, event.target.value as Asset[typeof field])} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" />
+            </label>
+          ))}
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>CATEGORY *</span><select required value={form.category} onChange={event => updateField('category', event.target.value as Category)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">{(['Hardware', 'Software', 'License', 'Network', 'Mobile'] as Category[]).map(category => <option key={category}>{category}</option>)}</select></label>
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>STATUS *</span><select required value={form.status} onChange={event => updateField('status', event.target.value as Status)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">{(['Active', 'Maintenance', 'Available', 'Retired'] as Status[]).map(status => <option key={status}>{status}</option>)}</select></label>
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>PURCHASE DATE *</span><input required type="date" value={form.purchaseDate} onChange={event => updateField('purchaseDate', event.target.value)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>LAST UPDATED *</span><input required type="date" value={form.lastUpdated} onChange={event => updateField('lastUpdated', event.target.value)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>COST *</span><input required min="0" step="0.01" type="number" value={form.cost} onChange={event => updateField('cost', Number(event.target.value))} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
+        </div>
+        {error && <div className="mt-4 border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+        <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4"><button type="button" onClick={onClose} className="h-10 border-2 border-black px-4 text-xs font-semibold hover:bg-gray-100" style={{ fontFamily: 'JetBrains Mono, monospace' }}>CANCEL</button><button type="submit" disabled={saving} className="h-10 bg-[#FF3B00] px-5 text-xs font-semibold text-white hover:bg-black disabled:opacity-50" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{saving ? 'SAVING...' : 'SAVE ASSET'}</button></div>
+      </form>
+    </div>
+  )
+}
+
 function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; adminRole: string; onLogout: () => void }) {
+  const [assets, setAssets] = useState<Asset[]>(DEFAULT_ASSETS)
+  const [showAddAsset, setShowAddAsset] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('All')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | 'All'>('All')
@@ -273,17 +305,38 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<string | null>(null)
 
-  const stats = useMemo(() => {
-    const total = ASSETS.length
-    const active = ASSETS.filter(a => a.status === 'Active').length
-    const maintenance = ASSETS.filter(a => a.status === 'Maintenance').length
-    const available = ASSETS.filter(a => a.status === 'Available').length
-    const totalCost = ASSETS.reduce((s, a) => s + a.cost, 0)
-    return { total, active, maintenance, available, totalCost }
+  useEffect(() => {
+    let active = true
+
+    async function loadAssets() {
+      try {
+        const stored = await initializeInventoryDb()
+        if (active) {
+          setAssets(stored)
+        }
+      } catch (error) {
+        console.error('Failed to load inventory assets from IndexedDB.', error)
+      }
+    }
+
+    void loadAssets()
+
+    return () => {
+      active = false
+    }
   }, [])
 
+  const stats = useMemo(() => {
+    const total = assets.length
+    const active = assets.filter(a => a.status === 'Active').length
+    const maintenance = assets.filter(a => a.status === 'Maintenance').length
+    const available = assets.filter(a => a.status === 'Available').length
+    const totalCost = assets.reduce((s, a) => s + a.cost, 0)
+    return { total, active, maintenance, available, totalCost }
+  }, [assets])
+
   const filtered = useMemo(() => {
-    let list = ASSETS
+    let list = assets
     if (activeTab !== 'All') list = list.filter(a => a.category === activeTab)
     if (statusFilter !== 'All') list = list.filter(a => a.status === statusFilter)
     if (search) {
@@ -301,9 +354,9 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
     })
     return list
-  }, [activeTab, statusFilter, search, sortKey, sortDir])
+  }, [assets, activeTab, statusFilter, search, sortKey, sortDir])
 
-  const selectedAsset = selected ? ASSETS.find(a => a.id === selected) ?? null : null
+  const selectedAsset = selected ? assets.find(a => a.id === selected) ?? null : null
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -359,7 +412,9 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" style={{ fontSize: 12 }}>⌕</span>
             </div>
-            <button className="h-8 px-4 bg-[#FF3B00] text-white border-2 border-black text-xs font-semibold hover:bg-black transition-colors" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em' }}>
+            <button onClick={() => setShowAddAsset(true)}
+              className="h-8 px-4 bg-[#FF3B00] text-white border-2 border-black text-xs font-semibold hover:bg-black transition-colors" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em' }}
+            >
               + ADD ASSET
             </button>
             <div className="flex items-center gap-2 border-l-2 border-black pl-3">
@@ -600,6 +655,18 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
           )}
         </div>
       </div>
+      {showAddAsset && (
+        <AddAssetModal
+          onClose={() => setShowAddAsset(false)}
+          onSave={async asset => {
+            if (assets.some(existing => existing.id.toLowerCase() === asset.id.toLowerCase())) {
+              throw new Error('Asset ID already exists. Please use a unique ID.')
+            }
+            await saveAssets([asset])
+            setAssets(current => [...current, asset])
+          }}
+        />
+      )}
     </div>
   )
 }
