@@ -456,7 +456,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
     const active = assets.filter(a => a.status === 'Active').length
     const maintenance = assets.filter(a => a.status === 'Maintenance').length
     const available = assets.filter(a => a.status === 'Available').length
-    const totalCost = assets.reduce((s, a) => s + a.cost, 0)
+    const totalCost = assets.reduce((sum, asset) => sum + Number(asset.cost), 0)
     return { total, active, maintenance, available, totalCost }
   }, [assets])
 
@@ -567,7 +567,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
                 { label: 'TOTAL ASSETS', value: dashboardStats?.totalAssets ?? stats.total, sub: 'across all categories' },
                 { label: 'ACTIVE', value: stats.active, sub: `${stats.available} available`, accent: '#00A86B' },
                 { label: 'IN MAINTENANCE', value: stats.maintenance, sub: 'requires attention', accent: '#F5A623' },
-                { label: 'TOTAL VALUE', value: `P${stats.totalCost.toLocaleString()}`, sub: 'replacement cost', accent: '#FF3B00' },
+                { label: 'TOTAL VALUE', value: `₱${stats.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'replacement cost', accent: '#FF3B00' },
               ].map((stat, i) => (
                 <div key={stat.label} className={`p-5 bg-white ${i < 3 ? 'border-r-2 border-black' : ''}`}>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.1em', color: '#6B6B6B' }}>
@@ -683,7 +683,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
                         <td style={{ padding: '10px 14px', fontSize: 12, color: '#6B6B6B' }}>{asset.location}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 600 }}>
-                            P{asset.cost.toLocaleString()}
+                            ₱{Number(asset.cost).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td style={{ padding: '10px 14px' }}>
@@ -740,7 +740,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
                   {[
                     { label: 'SERIAL', value: selectedAsset.serial, mono: true },
                     { label: 'VENDOR', value: selectedAsset.vendor, mono: false },
-                    { label: 'VALUE', value: `P${selectedAsset.cost.toLocaleString()}`, mono: true },
+                    { label: 'VALUE', value: `₱${Number(selectedAsset.cost).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, mono: true },
                     { label: 'PURCHASED', value: selectedAsset.purchaseDate, mono: true },
                     { label: 'LAST UPDATED', value: selectedAsset.lastUpdated, mono: true },
                     { label: 'LOCATION', value: selectedAsset.location, mono: false },
