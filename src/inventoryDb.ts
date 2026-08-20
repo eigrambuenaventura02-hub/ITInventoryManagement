@@ -16,6 +16,13 @@ export interface Asset {
   vendor: string
 }
 
+export interface DashboardStats {
+  totalAssets: number
+  activeUsers: number
+  lastAudit: string
+  systemStatus: string
+}
+
 export const DEFAULT_ASSETS: Asset[] = [
   { id: 'HW-0041', name: 'MacBook Pro 16in M3', category: 'Hardware', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: 'NYC HQ — Floor 4', serial: 'C02ZN4XZMD6T', purchaseDate: '2024-02-14', lastUpdated: '2026-07-28', cost: 3499, vendor: 'Apple Inc.' },
   { id: 'HW-0042', name: 'Dell UltraSharp 27in 4K', category: 'Hardware', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: 'NYC HQ — Floor 4', serial: 'DL7X92KQ3814', purchaseDate: '2024-02-14', lastUpdated: '2026-07-28', cost: 899, vendor: 'Dell Technologies' },
@@ -70,6 +77,10 @@ export async function initializeInventoryDb(): Promise<Asset[]> {
 export async function getAllAssets(): Promise<Asset[]> {
   const payload = await apiRequest<{ assets?: Asset[]; message?: string }>('/api/assets')
   return payload.assets ?? []
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  return apiRequest<DashboardStats>('/api/dashboard-stats')
 }
 
 export async function saveAssets(assets: Asset[]): Promise<void> {

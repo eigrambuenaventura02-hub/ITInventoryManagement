@@ -44,6 +44,14 @@ const createTableSql = `
   )
 `
 
+const createMetricsTableSql = `
+  CREATE TABLE IF NOT EXISTS system_metrics (
+    metric_key VARCHAR(50) PRIMARY KEY,
+    metric_value VARCHAR(255) NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )
+`
+
 const seedAssets = [
   ['HW-0041', 'MacBook Pro 16in M3', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'C02ZN4XZMD6T', '2024-02-14', '2026-07-28', 3499, 'Apple Inc.'],
   ['HW-0042', 'Dell UltraSharp 27in 4K', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'DL7X92KQ3814', '2024-02-14', '2026-07-28', 899, 'Dell Technologies'],
@@ -69,6 +77,12 @@ async function ensureDatabase() {
   try {
     const connection = await pool.getConnection()
     await connection.query(createTableSql)
+    await connection.query(createMetricsTableSql)
+    await connection.query(
+      `INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?), (?, ?)
+       ON DUPLICATE KEY UPDATE metric_value = metric_value`,
+      ['last_audit', new Date().toISOString().slice(0, 10), 'system_status', 'ONLINE'],
+    )
 
     const [rows] = await connection.query('SELECT COUNT(*) AS total FROM assets')
     const total = Number(rows[0].total)
@@ -94,6 +108,30 @@ app.get('/api/assets', async (req, res) => {
     res.json({ assets: rows })
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch assets from database.', error: String(error) })
+  }
+})
+
+app.get('/api/dashboard-stats', async (req, res) => {
+  try {
+    const [assetRows] = await pool.query(`
+      SELECT
+        COUNT(*) AS totalAssets,
+        COUNT(DISTINCT NULLIF(TRIM(assignedTo), '')) AS activeUsers
+      FROM assets
+    `)
+    const [metricRows] = await pool.query(
+      'SELECT metric_key, metric_value FROM system_metrics WHERE metric_key IN (?, ?)',
+      ['last_audit', 'system_status'],
+    )
+    const metrics = Object.fromEntries(metricRows.map(metric => [metric.metric_key, metric.metric_value]))
+    res.json({
+      totalAssets: Number(assetRows[0].totalAssets),
+      activeUsers: Number(assetRows[0].activeUsers),
+      lastAudit: metrics.last_audit ?? '—',
+      systemStatus: metrics.system_status ?? 'ONLINE',
+    })
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch dashboard metrics.', error: String(error) })
   }
 })
 
