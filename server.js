@@ -19,6 +19,7 @@ const dbConfig = {
   database: process.env.DB_NAME || 'it_inventory',
   waitForConnections: true,
   connectionLimit: 10,
+  ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 }
 
 const pool = mysql.createPool(dbConfig)
