@@ -45,9 +45,11 @@ export const DEFAULT_ASSETS: Asset[] = [
 ]
 
 async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('inventory_session_token')
   const response = await fetch(url.startsWith('http') ? url : `https://itinventorymanagement-backend.onrender.com${url}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
     ...options,
@@ -57,6 +59,7 @@ async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T>
   const payload = text ? (JSON.parse(text) as T) : (null as T)
 
   if (!response.ok) {
+    if (response.status === 401) localStorage.removeItem('inventory_session_token')
     const message = payload && typeof payload === 'object' && 'message' in payload
       ? String((payload as { message?: string }).message)
       : 'Request to the inventory API failed.'
@@ -67,11 +70,20 @@ async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T>
 }
 
 export async function initializeInventoryDb(): Promise<Asset[]> {
-  try {
-    return await getAllAssets()
-  } catch {
-    return DEFAULT_ASSETS
-  }
+  return getAllAssets()
+}
+
+export async function login(username: string, password: string): Promise<{ name: string; role: string }> {
+  const payload = await apiRequest<{ token: string; user: { name: string; role: string } }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+  localStorage.setItem('inventory_session_token', payload.token)
+  return payload.user
+}
+
+export function logout(): void {
+  localStorage.removeItem('inventory_session_token')
 }
 
 export async function getAllAssets(): Promise<Asset[]> {

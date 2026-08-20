@@ -1,20 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { DEFAULT_ASSETS, getDashboardStats, initializeInventoryDb, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
+import { getDashboardStats, initializeInventoryDb, login, logout, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
 
 type Tab = 'All' | Category
 
-// Demo credentials — replace with real auth in production
-const ADMIN_CREDENTIALS = [
-  { username: 'eigram', password: 'ddcbf38ejb', name: 'System Administrator', role: 'SUPER_ADMIN' },
-  { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
-  { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
-  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
-  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' },
-  { username: 'daniel', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT Manager' }
-]
-
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -25,30 +14,21 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
 
   useEffect(() => { usernameRef.current?.focus() }, [])
 
-  useEffect(() => {
-    void getDashboardStats().then(setDashboardStats).catch(error => console.error('Failed to load dashboard metrics.', error))
-  }, [])
-
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    // Simulate auth latency
-    setTimeout(() => {
-      const match = ADMIN_CREDENTIALS.find(
-        c => c.username === username.trim() && c.password === password
-      )
-      if (match) {
-        onLogin(match.name, match.role)
-      } else {
-        setError('Invalid credentials. Access denied. Please Contact Eigram')
-        setShake(true)
-        setPassword('')
-        setTimeout(() => setShake(false), 600)
-      }
+    try {
+      const user = await login(username, password)
+      onLogin(user.name, user.role)
+    } catch {
+      setError('Invalid credentials. Access denied. Please Contact Eigram')
+      setShake(true)
+      setPassword('')
+      setTimeout(() => setShake(false), 600)
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -78,10 +58,10 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
 
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: 'TOTAL ASSETS', value: dashboardStats?.totalAssets ?? '—' },
-            { label: 'ACTIVE USERS', value: dashboardStats?.activeUsers ?? '—' },
-            { label: 'LAST AUDIT', value: dashboardStats?.lastAudit ?? '—' },
-            { label: 'SYSTEM STATUS', value: dashboardStats?.systemStatus ?? '—' },
+            { label: 'TOTAL ASSETS', value: '—' },
+            { label: 'ACTIVE USERS', value: '—' },
+            { label: 'LAST AUDIT', value: '—' },
+            { label: 'SYSTEM STATUS', value: '—' },
           ].map(s => (
             <div key={s.label} className="border border-zinc-800 p-3">
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6B6B6B', letterSpacing: '0.1em', marginBottom: 4 }}>{s.label}</div>
@@ -414,7 +394,7 @@ function AssetStatusModal({ asset, onClose, onSave }: { asset: Asset; onClose: (
 }
 
 function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; adminRole: string; onLogout: () => void }) {
-  const [assets, setAssets] = useState<Asset[]>(DEFAULT_ASSETS)
+  const [assets, setAssets] = useState<Asset[]>([])
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [showEditAsset, setShowEditAsset] = useState(false)
@@ -835,5 +815,5 @@ export default function App() {
     return <LoginScreen onLogin={(name, role) => setSession({ name, role })} />
   }
 
-  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => setSession(null)} />
+  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => { logout(); setSession(null) }} />
 }
