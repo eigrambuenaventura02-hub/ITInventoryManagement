@@ -9,7 +9,8 @@ const ADMIN_CREDENTIALS = [
   { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
   { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
   { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
-  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' }
+  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' },
+  { username: 'daniel', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT Manager' }
 ]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
