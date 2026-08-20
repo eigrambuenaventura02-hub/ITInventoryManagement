@@ -819,11 +819,34 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
 }
 
 export default function App() {
-  const [session, setSession] = useState<{ name: string; role: string } | null>(null)
+  const [session, setSession] = useState<{ name: string; role: string } | null>(() => {
+    try {
+      const stored = localStorage.getItem('inventory_session')
+      if (!stored) return null
+      const parsed = JSON.parse(stored) as { name?: unknown; role?: unknown }
+      return typeof parsed.name === 'string' && typeof parsed.role === 'string'
+        ? { name: parsed.name, role: parsed.role }
+        : null
+    } catch {
+      localStorage.removeItem('inventory_session')
+      return null
+    }
+  })
 
-  if (!session) {
-    return <LoginScreen onLogin={(name, role) => setSession({ name, role })} />
+  function handleLogin(name: string, role: string) {
+    const nextSession = { name, role }
+    localStorage.setItem('inventory_session', JSON.stringify(nextSession))
+    setSession(nextSession)
   }
 
-  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => setSession(null)} />
+  function handleLogout() {
+    localStorage.removeItem('inventory_session')
+    setSession(null)
+  }
+
+  if (!session) {
+    return <LoginScreen onLogin={handleLogin} />
+  }
+
+  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={handleLogout} />
 }
