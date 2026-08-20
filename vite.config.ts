@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
       proxy: {
-        '/api': 'http://localhost:4000',
+        '/api': 'https://itinventorymanagement-backend.onrender.com',
       },
       watch: { ignored: ['**/.figma/**'] },
     },
