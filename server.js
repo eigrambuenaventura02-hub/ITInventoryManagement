@@ -217,8 +217,6 @@ async function requireAuth(req, res, next) {
   }
 }
 
-app.use('/api', requireAuth)
-
 app.get('/api/assets', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM assets ORDER BY id ASC')

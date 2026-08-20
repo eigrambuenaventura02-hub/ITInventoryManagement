@@ -1,7 +1,16 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { getDashboardStats, initializeInventoryDb, login, logout, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
+import { DEFAULT_ASSETS, getDashboardStats, initializeInventoryDb, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
 
 type Tab = 'All' | Category
+
+const ADMIN_CREDENTIALS = [
+  { username: 'eigram', password: 'ddcbf38ejb', name: 'System Administrator', role: 'SUPER_ADMIN' },
+  { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
+  { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
+  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
+  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' },
+  { username: 'daniel', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT Manager' },
+]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
   const [username, setUsername] = useState('')
@@ -14,21 +23,22 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
 
   useEffect(() => { usernameRef.current?.focus() }, [])
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    try {
-      const user = await login(username, password)
-      onLogin(user.name, user.role)
-    } catch {
-      setError('Invalid credentials. Access denied. Please Contact Eigram')
-      setShake(true)
-      setPassword('')
-      setTimeout(() => setShake(false), 600)
-    } finally {
+    setTimeout(() => {
+      const match = ADMIN_CREDENTIALS.find(candidate => candidate.username === username.trim() && candidate.password === password)
+      if (match) {
+        onLogin(match.name, match.role)
+      } else {
+        setError('Invalid credentials. Access denied. Please Contact Eigram')
+        setShake(true)
+        setPassword('')
+        setTimeout(() => setShake(false), 600)
+      }
       setLoading(false)
-    }
+    }, 800)
   }
 
   return (
@@ -394,7 +404,7 @@ function AssetStatusModal({ asset, onClose, onSave }: { asset: Asset; onClose: (
 }
 
 function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; adminRole: string; onLogout: () => void }) {
-  const [assets, setAssets] = useState<Asset[]>([])
+  const [assets, setAssets] = useState<Asset[]>(DEFAULT_ASSETS)
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [showEditAsset, setShowEditAsset] = useState(false)
@@ -815,5 +825,5 @@ export default function App() {
     return <LoginScreen onLogin={(name, role) => setSession({ name, role })} />
   }
 
-  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => { logout(); setSession(null) }} />
+  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => setSession(null)} />
 }
