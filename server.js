@@ -2,14 +2,11 @@ import express from 'express'
 import cors from 'cors'
 import mysql from 'mysql2/promise'
 import dotenv from 'dotenv'
-import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
-import { promisify } from 'node:util'
 
 dotenv.config()
 
 const app = express()
 const port = process.env.PORT || 4000
-const scrypt = promisify(scryptCallback)
 const allowedOrigins = (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://localhost:8443')
   .split(',')
   .map(origin => origin.trim())
@@ -60,29 +57,6 @@ const createMetricsTableSql = `
   )
 `
 
-const createUsersTableSql = `
-  CREATE TABLE IF NOT EXISTS users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(100) NOT NULL UNIQUE,
-    password_hash CHAR(128) NOT NULL,
-    password_salt CHAR(32) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    role VARCHAR(100) NOT NULL,
-    active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`
-
-const createSessionsTableSql = `
-  CREATE TABLE IF NOT EXISTS sessions (
-    token_hash CHAR(64) PRIMARY KEY,
-    user_id INT NOT NULL,
-    expires_at DATETIME NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  )
-`
-
 const seedAssets = [
   ['HW-0041', 'MacBook Pro 16in M3', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'C02ZN4XZMD6T', '2024-02-14', '2026-07-28', 3499, 'Apple Inc.'],
   ['HW-0042', 'Dell UltraSharp 27in 4K', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'DL7X92KQ3814', '2024-02-14', '2026-07-28', 899, 'Dell Technologies'],
@@ -104,48 +78,11 @@ const seedAssets = [
   ['MOB-0007', 'iPad Pro 13in M4', 'Mobile', 'Marcus Webb', 'Sales', 'Active', 'Remote — Chicago', 'IPAD13M4NZQ04', '2024-09-20', '2026-07-10', 1299, 'Apple Inc.'],
 ]
 
-async function hashPassword(password, salt = randomBytes(16).toString('hex')) {
-  const derivedKey = await scrypt(password, salt, 64)
-  return { hash: Buffer.from(derivedKey).toString('hex'), salt }
-}
-
-async function verifyPassword(password, hash, salt) {
-  const derivedKey = await scrypt(password, salt, 64)
-  const expected = Buffer.from(hash, 'hex')
-  const actual = Buffer.from(derivedKey)
-  return expected.length === actual.length && timingSafeEqual(expected, actual)
-}
-
-function tokenHash(token) {
-  return createHash('sha256').update(token).digest('hex')
-}
-
-async function seedInitialUser(connection) {
-  const [rows] = await connection.query('SELECT COUNT(*) AS total FROM users')
-  if (Number(rows[0].total) > 0) return
-
-  const username = process.env.INITIAL_ADMIN_USERNAME?.trim()
-  const password = process.env.INITIAL_ADMIN_PASSWORD
-  if (!username || !password) {
-    console.warn('No users exist. Set INITIAL_ADMIN_USERNAME and INITIAL_ADMIN_PASSWORD in the backend environment.')
-    return
-  }
-
-  const { hash, salt } = await hashPassword(password)
-  await connection.query(
-    'INSERT INTO users (username, password_hash, password_salt, name, role) VALUES (?, ?, ?, ?, ?)',
-    [username, hash, salt, process.env.INITIAL_ADMIN_NAME || username, process.env.INITIAL_ADMIN_ROLE || 'SUPER_ADMIN'],
-  )
-}
-
 async function ensureDatabase() {
   try {
     const connection = await pool.getConnection()
     await connection.query(createTableSql)
     await connection.query(createMetricsTableSql)
-    await connection.query(createUsersTableSql)
-    await connection.query(createSessionsTableSql)
-    await seedInitialUser(connection)
     await connection.query(
       `INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?), (?, ?)
        ON DUPLICATE KEY UPDATE metric_value = metric_value`,
@@ -167,53 +104,6 @@ async function ensureDatabase() {
   } catch (error) {
     console.error('Database initialization failed:', error)
     process.exit(1)
-  }
-}
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : ''
-    const password = typeof req.body?.password === 'string' ? req.body.password : ''
-    if (!username || !password) return res.status(400).json({ message: 'Username and password are required.' })
-
-    const [rows] = await pool.query(
-      'SELECT id, username, password_hash, password_salt, name, role FROM users WHERE username = ? AND active = TRUE LIMIT 1',
-      [username],
-    )
-    const user = rows[0]
-    const valid = user ? await verifyPassword(password, user.password_hash, user.password_salt) : false
-    if (!valid) return res.status(401).json({ message: 'Invalid credentials.' })
-
-    const token = randomBytes(32).toString('hex')
-    await pool.query(
-      'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 8 HOUR))',
-      [tokenHash(token), user.id],
-    )
-    res.json({ token, user: { name: user.name, role: user.role, username: user.username } })
-  } catch (error) {
-    console.error('Login failed:', error)
-    res.status(500).json({ message: 'Unable to sign in.' })
-  }
-})
-
-async function requireAuth(req, res, next) {
-  try {
-    const authorization = req.get('authorization') || ''
-    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
-    if (!token) return res.status(401).json({ message: 'Authentication required.' })
-
-    const [rows] = await pool.query(
-      `SELECT users.id, users.username, users.name, users.role
-       FROM sessions JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = ? AND sessions.expires_at > NOW() AND users.active = TRUE`,
-      [tokenHash(token)],
-    )
-    if (!rows[0]) return res.status(401).json({ message: 'Session expired or invalid.' })
-    req.user = rows[0]
-    next()
-  } catch (error) {
-    console.error('Authentication check failed:', error)
-    res.status(500).json({ message: 'Authentication service unavailable.' })
   }
 }
 

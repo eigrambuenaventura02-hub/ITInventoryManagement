@@ -10,6 +10,7 @@ const ADMIN_CREDENTIALS = [
   { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
   { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' },
   { username: 'daniel', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT Manager' },
+  { username: 'grae', password: 'tester123', name: 'Test User', role: 'Test Team' }
 ]
 
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
@@ -32,10 +33,11 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
       if (match) {
         onLogin(match.name, match.role)
       } else {
-        setError('Invalid credentials. Access denied. Please Contact Eigram')
-        setShake(true)
-        setPassword('')
-        setTimeout(() => setShake(false), 600)
+      setError('Invalid credentials. Access denied. Please Contact Eigram')
+      setShake(true)
+      setPassword('')
+      setTimeout(() => setShake(false), 600)
+      setLoading(false)
       }
       setLoading(false)
     }, 800)
