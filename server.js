@@ -15,7 +15,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,h
   .map(origin => origin.trim())
   .filter(Boolean)
 
-app.use(cors({ origin: allowedOrigins }))
+app.use(cors())
 app.use(express.json())
 
 const dbConfig = {
