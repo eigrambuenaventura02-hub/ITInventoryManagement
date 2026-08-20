@@ -45,7 +45,7 @@ export const DEFAULT_ASSETS: Asset[] = [
 ]
 
 async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetch(url.startsWith('http') ? url : `https://itinventorymanagement-backend.onrender.com${url}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers ?? {}),
