@@ -1,19 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { DEFAULT_ASSETS, getDashboardStats, initializeInventoryDb, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
+import { DEFAULT_ASSETS, getDashboardStats, getPublicDashboardStats, initializeInventoryDb, login, logout, saveAssets, type Asset, type Category, type DashboardStats, type Status } from './inventoryDb'
 
 type Tab = 'All' | Category
 
-const ADMIN_CREDENTIALS = [
-  { username: 'eigram', password: 'ddcbf38ejb', name: 'System Administrator', role: 'SUPER_ADMIN' },
-  { username: 'it-admin', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT_ADMIN' },
-  { username: 'jm', password: 'password123', name: 'IT Support', role: 'IT_ADMIN' },
-  { username: 'jeremy', password: 'password321', name: 'IT Operations', role: 'IT_ADMIN' },
-  { username: 'testuser', password: 'testinglang', name: 'Test User', role: 'Tester' },
-  { username: 'daniel', password: 'M@dinam3t', name: 'IT Administrator', role: 'IT Manager' },
-  { username: 'grae', password: 'tester123', name: 'Test User', role: 'Test Team' }
-]
-
 function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => void }) {
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -24,23 +15,25 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
 
   useEffect(() => { usernameRef.current?.focus() }, [])
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    void getPublicDashboardStats().then(setDashboardStats).catch(error => console.error('Failed to load public dashboard metrics.', error))
+  }, [])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setTimeout(() => {
-      const match = ADMIN_CREDENTIALS.find(candidate => candidate.username === username.trim() && candidate.password === password)
-      if (match) {
-        onLogin(match.name, match.role)
-      } else {
+    try {
+      const user = await login(username, password)
+      onLogin(user.name, user.role)
+    } catch {
       setError('Invalid credentials. Access denied. Please Contact Eigram')
       setShake(true)
       setPassword('')
       setTimeout(() => setShake(false), 600)
+    } finally {
       setLoading(false)
-      }
-      setLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -70,14 +63,14 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, role: string) => voi
 
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: 'TOTAL ASSETS', value: '—' },
-            { label: 'ACTIVE USERS', value: '—' },
-            { label: 'LAST AUDIT', value: '—' },
-            { label: 'SYSTEM STATUS', value: '—' },
+            { label: 'TOTAL ASSETS', value: dashboardStats?.totalAssets ?? '—' },
+            { label: 'ACTIVE USERS', value: dashboardStats?.activeUsers ?? '—' },
+            { label: 'LAST AUDIT', value: dashboardStats?.lastAudit ?? '—' },
+            { label: 'SYSTEM STATUS', value: dashboardStats?.systemStatus ?? '—' },
           ].map(s => (
             <div key={s.label} className="border border-zinc-800 p-3">
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#6B6B6B', letterSpacing: '0.1em', marginBottom: 4 }}>{s.label}</div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, fontWeight: 700, color: s.label === 'SYSTEM STATUS' ? '#00A86B' : '#F4F3EF' }}>{s.value}</div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, fontWeight: 700, color: s.label === 'SYSTEM STATUS' ? '#00A86B' : s.label === 'LAST AUDIT' ? '#FF3B00' : '#F4F3EF' }}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -201,7 +194,7 @@ const STATUS_STYLES: Record<Status, { bg: string; text: string; dot: string }> =
   Active: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   Available: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   Maintenance: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
-  Retired: { bg: 'bg-gray-100', text: 'text-gray-500', dot: 'bg-gray-400' },
+  Decommissioned: { bg: 'bg-gray-100', text: 'text-gray-500', dot: 'bg-gray-400' },
 }
 
 const CATEGORY_ICONS: Record<Category | 'All', string> = {
@@ -231,8 +224,16 @@ const EMPTY_ASSET: Asset = {
   lastUpdated: new Date().toISOString().slice(0, 10), cost: 0, vendor: '',
 }
 
+const DEPARTMENTS = ['HR', 'Finance', 'Marketing', 'Sales', 'Operations', 'IT'] as const
+type Department = typeof DEPARTMENTS[number]
+const LOCATIONS = ['PH-Baguio City'] as const
+
 function AddAssetModal({ initialAsset = EMPTY_ASSET, isEditing = false, onClose, onSave }: { initialAsset?: Asset; isEditing?: boolean; onClose: () => void; onSave: (asset: Asset) => Promise<void> }) {
-  const [form, setForm] = useState<Asset>(initialAsset)
+  const [form, setForm] = useState<Asset>(() => ({
+    ...initialAsset,
+    department: DEPARTMENTS.includes(initialAsset.department as Department) ? initialAsset.department : null,
+    location: LOCATIONS.includes(initialAsset.location as typeof LOCATIONS[number]) ? initialAsset.location : '',
+  }))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -261,8 +262,8 @@ function AddAssetModal({ initialAsset = EMPTY_ASSET, isEditing = false, onClose,
 
   const textFields: { field: keyof Asset; label: string; required?: boolean }[] = [
     { field: 'id', label: 'ASSET ID', required: true }, { field: 'name', label: 'NAME', required: true },
-    { field: 'assignedTo', label: 'ASSIGNED TO' }, { field: 'department', label: 'DEPARTMENT' },
-    { field: 'location', label: 'LOCATION', required: true }, { field: 'serial', label: 'SERIAL', required: true },
+    { field: 'assignedTo', label: 'ASSIGNED TO' },
+    { field: 'serial', label: 'SERIAL', required: true },
     { field: 'vendor', label: 'VENDOR', required: true },
   ]
 
@@ -280,8 +281,22 @@ function AddAssetModal({ initialAsset = EMPTY_ASSET, isEditing = false, onClose,
               <input required={required} disabled={isEditing && field === 'id'} value={String(form[field] ?? '')} onChange={event => updateField(field, event.target.value as Asset[typeof field])} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00] disabled:bg-gray-100 disabled:text-gray-500" />
             </label>
           ))}
+          <label className="flex flex-col gap-1">
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666', letterSpacing: '0.08em' }}>DEPARTMENT</span>
+            <select value={form.department ?? ''} onChange={event => updateField('department', (event.target.value || null) as Asset['department'])} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">
+              <option value="">Select department</option>
+              {DEPARTMENTS.map(department => <option key={department} value={department}>{department}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666', letterSpacing: '0.08em' }}>LOCATION *</span>
+            <select required value={form.location} onChange={event => updateField('location', event.target.value)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">
+              <option value="">Select location</option>
+              {LOCATIONS.map(location => <option key={location} value={location}>{location}</option>)}
+            </select>
+          </label>
           <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>CATEGORY *</span><select required value={form.category} onChange={event => updateField('category', event.target.value as Category)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">{(['Hardware', 'Software', 'License', 'Network', 'Mobile'] as Category[]).map(category => <option key={category}>{category}</option>)}</select></label>
-          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>STATUS *</span><select required value={form.status} onChange={event => updateField('status', event.target.value as Status)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">{(['Active', 'Maintenance', 'Available', 'Retired'] as Status[]).map(status => <option key={status}>{status}</option>)}</select></label>
+          <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>STATUS *</span><select required value={form.status} onChange={event => updateField('status', event.target.value as Status)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">{(['Active', 'Maintenance', 'Available', 'Decommissioned'] as Status[]).map(status => <option key={status}>{status}</option>)}</select></label>
           <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>PURCHASE DATE *</span><input required type="date" value={form.purchaseDate} onChange={event => updateField('purchaseDate', event.target.value)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
           <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>LAST UPDATED *</span><input required type="date" value={form.lastUpdated} onChange={event => updateField('lastUpdated', event.target.value)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
           <label className="flex flex-col gap-1"><span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666' }}>COST *</span><input required min="0" step="0.01" type="number" value={form.cost} onChange={event => updateField('cost', Number(event.target.value))} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]" /></label>
@@ -391,7 +406,7 @@ function AssetStatusModal({ asset, onClose, onSave }: { asset: Asset; onClose: (
         <label className="flex flex-col gap-1">
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#666', letterSpacing: '0.08em' }}>STATUS</span>
           <select value={status} onChange={event => setStatus(event.target.value as Status)} className="h-10 border-2 border-gray-300 px-3 text-sm outline-none focus:border-[#FF3B00]">
-            {(['Available', 'Active', 'Maintenance'] as Status[]).map(option => <option key={option} value={option}>{option}</option>)}
+            {(['Available', 'Active', 'Maintenance', 'Decommissioned'] as Status[]).map(option => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
 
@@ -418,6 +433,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
   const [sortKey, setSortKey] = useState<SortKey>('id')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<string | null>(null)
+  const [decommissioning, setDecommissioning] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -479,6 +495,18 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
+  }
+
+  async function markSelectedDecommissioned() {
+    if (!selectedAsset || selectedAsset.status === 'Decommissioned') return
+    setDecommissioning(true)
+    try {
+      const updatedAsset = { ...selectedAsset, status: 'Decommissioned' as Status, lastUpdated: new Date().toISOString().slice(0, 10) }
+      await saveAssets([updatedAsset])
+      setAssets(current => current.map(asset => asset.id === updatedAsset.id ? updatedAsset : asset))
+    } finally {
+      setDecommissioning(false)
+    }
   }
 
   const TABS: Tab[] = ['All', 'Hardware', 'Software', 'License', 'Network', 'Mobile']
@@ -591,7 +619,7 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
               </div>
               <div className="flex items-center gap-2">
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#6B6B6B', letterSpacing: '0.08em' }}>STATUS:</span>
-                {(['All', 'Active', 'Available', 'Maintenance', 'Retired'] as const).map(s => (
+                {(['All', 'Active', 'Available', 'Maintenance', 'Decommissioned'] as const).map(s => (
                   <button
                     key={s}
                     onClick={() => setStatusFilter(s)}
@@ -606,23 +634,33 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
 
             {/* Table */}
             <div className="flex-1 overflow-auto">
-              <table className="w-full border-collapse">
+              <table className="w-full table-auto border-collapse">
+                <colgroup>
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '24%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#0A0A0A] text-white">
                     {([
-                      { key: 'id', label: 'ASSET ID', w: '100px' },
-                      { key: 'name', label: 'NAME', w: 'auto' },
-                      { key: 'category', label: 'CATEGORY', w: '110px' },
-                      { key: null, label: 'ASSIGNED TO', w: '160px' },
-                      { key: 'status', label: 'STATUS', w: '120px' },
-                      { key: null, label: 'LOCATION', w: '180px' },
-                      { key: 'cost', label: 'VALUE', w: '90px' },
-                      { key: 'lastUpdated', label: 'UPDATED', w: '110px' },
-                    ] as { key: SortKey | null; label: string; w: string }[]).map(col => (
+                      { key: 'id', label: 'ASSET ID' },
+                      { key: 'name', label: 'NAME' },
+                      { key: 'category', label: 'CATEGORY' },
+                      { key: null, label: 'ASSIGNED TO' },
+                      { key: 'status', label: 'STATUS' },
+                      { key: null, label: 'LOCATION' },
+                      { key: 'cost', label: 'VALUE' },
+                      { key: 'lastUpdated', label: 'UPDATED' },
+                    ] as { key: SortKey | null; label: string }[]).map(col => (
                       <th
                         key={col.label}
                         onClick={() => col.key && toggleSort(col.key)}
-                        style={{ width: col.w, fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.1em', padding: '10px 14px', textAlign: 'left', cursor: col.key ? 'pointer' : 'default', fontWeight: 500, whiteSpace: 'nowrap' }}
+                        style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.1em', padding: '10px clamp(6px, 1.2vw, 14px)', textAlign: 'left', cursor: col.key ? 'pointer' : 'default', fontWeight: 500, whiteSpace: 'normal', position: 'relative' }}
                         className={col.key ? 'hover:bg-zinc-800 select-none' : ''}
                       >
                         {col.label}
@@ -767,6 +805,15 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
                   <button onClick={() => setShowStatusModal(true)} className="w-full h-9 border border-gray-300 text-xs text-gray-500 hover:border-black hover:text-black transition-colors" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.08em' }}>
                     FLAG FOR MAINTENANCE
                   </button>
+                  {selectedAsset.status === 'Decommissioned' ? (
+                    <button onClick={() => setShowStatusModal(true)} className="w-full h-9 border border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.08em' }}>
+                      RESTORE ASSET
+                    </button>
+                  ) : (
+                    <button onClick={() => void markSelectedDecommissioned()} disabled={decommissioning} className="w-full h-9 border border-red-300 text-xs text-red-600 hover:bg-red-600 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.08em' }}>
+                      {decommissioning ? 'MARKING...' : 'MARK DECOMMISSIONED'}
+                    </button>
+                  )}
                 </div>
               </div>
             </aside>
@@ -823,6 +870,10 @@ function Dashboard({ adminName, adminRole, onLogout }: { adminName: string; admi
 export default function App() {
   const [session, setSession] = useState<{ name: string; role: string } | null>(() => {
     try {
+      if (!localStorage.getItem('inventory_account_token')) {
+        localStorage.removeItem('inventory_session')
+        return null
+      }
       const stored = localStorage.getItem('inventory_session')
       if (!stored) return null
       const parsed = JSON.parse(stored) as { name?: unknown; role?: unknown }
@@ -850,5 +901,5 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />
   }
 
-  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={handleLogout} />
+  return <Dashboard adminName={session.name} adminRole={session.role} onLogout={() => { logout(); handleLogout() }} />
 }

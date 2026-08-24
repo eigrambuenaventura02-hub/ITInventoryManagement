@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import mysql from 'mysql2/promise'
 import dotenv from 'dotenv'
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 
 dotenv.config()
 
@@ -12,7 +13,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,h
   .map(origin => origin.trim())
   .filter(Boolean)
 
-app.use(cors())
+app.use(cors({ origin: allowedOrigins }))
 app.use(express.json())
 
 const dbConfig = {
@@ -57,6 +58,29 @@ const createMetricsTableSql = `
   )
 `
 
+const createAccountsTableSql = `
+  CREATE TABLE IF NOT EXISTS accounts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password_hash CHAR(128) NOT NULL,
+    password_salt CHAR(32) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(100) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`
+
+const createSessionsTableSql = `
+  CREATE TABLE IF NOT EXISTS account_sessions (
+    token_hash CHAR(64) PRIMARY KEY,
+    account_id INT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )
+`
+
 const seedAssets = [
   ['HW-0041', 'MacBook Pro 16in M3', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'C02ZN4XZMD6T', '2024-02-14', '2026-07-28', 3499, 'Apple Inc.'],
   ['HW-0042', 'Dell UltraSharp 27in 4K', 'Hardware', 'Sarah Chen', 'Engineering', 'Active', 'NYC HQ — Floor 4', 'DL7X92KQ3814', '2024-02-14', '2026-07-28', 899, 'Dell Technologies'],
@@ -67,7 +91,7 @@ const seedAssets = [
   ['HW-0047', 'iPhone 15 Pro', 'Mobile', 'Jordan Kim', 'Executive', 'Active', 'Remote — LA', 'IP15PNZK0034', '2024-01-08', '2026-07-22', 999, 'Apple Inc.'],
   ['HW-0048', 'Synology NAS DS923+', 'Hardware', null, 'IT', 'Maintenance', 'NYC HQ — Server Room', 'SY9RL3VQ2201', '2023-04-20', '2026-08-01', 1800, 'Synology'],
   ['HW-0049', 'Logitech MX Keys S', 'Hardware', 'Tyler Brooks', 'Operations', 'Active', 'NYC HQ — Floor 2', 'LG4XN8WZ0055', '2025-01-15', '2026-06-10', 109, 'Logitech'],
-  ['HW-0050', 'Dell Precision 5570', 'Hardware', null, null, 'Retired', 'NYC HQ — Storage', 'DL2Q7YN4K011', '2020-03-10', '2026-02-28', 2800, 'Dell Technologies'],
+  ['HW-0050', 'Dell Precision 5570', 'Hardware', null, null, 'Decommissioned', 'NYC HQ — Storage', 'DL2Q7YN4K011', '2020-03-10', '2026-02-28', 2800, 'Dell Technologies'],
   ['SW-0011', 'Adobe Creative Cloud', 'Software', 'Priya Nair', 'Design', 'Active', '—', 'ADO-CC-7X4N-2024', '2024-11-01', '2026-07-01', 659, 'Adobe Inc.'],
   ['SW-0012', 'JetBrains All Products', 'Software', 'Sarah Chen', 'Engineering', 'Active', '—', 'JB-ALL-EN-8814', '2025-02-01', '2026-07-01', 779, 'JetBrains'],
   ['SW-0013', 'Figma Organization', 'Software', null, 'Design', 'Active', '—', 'FIG-ORG-2025-0112', '2025-01-01', '2026-07-01', 4200, 'Figma, Inc.'],
@@ -78,15 +102,64 @@ const seedAssets = [
   ['MOB-0007', 'iPad Pro 13in M4', 'Mobile', 'Marcus Webb', 'Sales', 'Active', 'Remote — Chicago', 'IPAD13M4NZQ04', '2024-09-20', '2026-07-10', 1299, 'Apple Inc.'],
 ]
 
+function hashPassword(password, salt = randomBytes(16).toString('hex')) {
+  return { hash: scryptSync(password, salt, 64).toString('hex'), salt }
+}
+
+function verifyPassword(password, hash, salt) {
+  const expected = Buffer.from(hash, 'hex')
+  const actual = Buffer.from(scryptSync(password, salt, 64))
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
+}
+
+function hashToken(token) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function formatEditTimestamp(value) {
+  const match = String(value ?? '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/)
+  if (!match) return value ?? '—'
+  const hour = Number(match[2])
+  const period = hour >= 12 ? 'PM' : 'AM'
+  const hour12 = hour % 12 || 12
+  return `${match[1]} ${hour12}:${match[3]}:${match[4]} ${period}`
+}
+
+async function seedAccounts(connection) {
+  let accounts = []
+  if (process.env.INITIAL_ACCOUNTS_JSON) {
+    try {
+      accounts = JSON.parse(process.env.INITIAL_ACCOUNTS_JSON)
+    } catch {
+      throw new Error('INITIAL_ACCOUNTS_JSON must contain valid JSON.')
+    }
+  }
+
+  for (const account of accounts) {
+    if (!account.username || !account.password) continue
+    const { hash, salt } = hashPassword(account.password)
+    await connection.query(
+      `INSERT INTO accounts (username, password_hash, password_salt, name, role)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), password_salt = VALUES(password_salt), name = VALUES(name), role = VALUES(role), active = TRUE`,
+      [account.username.trim(), hash, salt, account.name || account.username, account.role || 'IT_ADMIN'],
+    )
+  }
+}
+
 async function ensureDatabase() {
   try {
     const connection = await pool.getConnection()
     await connection.query(createTableSql)
+    await connection.query("UPDATE assets SET status = 'Decommissioned' WHERE status = 'Retired'")
     await connection.query(createMetricsTableSql)
+    await connection.query(createAccountsTableSql)
+    await connection.query(createSessionsTableSql)
+    await seedAccounts(connection)
     await connection.query(
-      `INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?), (?, ?)
+      `INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?), (?, ?), (?, ?), (?, ?)
        ON DUPLICATE KEY UPDATE metric_value = metric_value`,
-      ['last_audit', new Date().toISOString().slice(0, 10), 'system_status', 'ONLINE'],
+      ['last_audit', new Date().toISOString().slice(0, 10), 'last_editor', '—', 'last_edit_at', '—', 'system_status', 'ONLINE'],
     )
 
     const [rows] = await connection.query('SELECT COUNT(*) AS total FROM assets')
@@ -107,6 +180,83 @@ async function ensureDatabase() {
   }
 }
 
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : ''
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+    if (!username || !password) return res.status(400).json({ message: 'Username and password are required.' })
+
+    const [rows] = await pool.query(
+      'SELECT id, username, password_hash, password_salt, name, role FROM accounts WHERE username = ? AND active = TRUE LIMIT 1',
+      [username],
+    )
+    const account = rows[0]
+    if (!account || !verifyPassword(password, account.password_hash, account.password_salt)) {
+      return res.status(401).json({ message: 'Invalid credentials.' })
+    }
+
+    const token = randomBytes(32).toString('hex')
+    await pool.query(
+      'INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 8 HOUR))',
+      [hashToken(token), account.id],
+    )
+    res.json({ token, user: { name: account.name, role: account.role, username: account.username } })
+  } catch (error) {
+    console.error('Login failed:', error)
+    res.status(500).json({ message: 'Unable to sign in.' })
+  }
+})
+
+app.get('/api/public-dashboard-stats', async (req, res) => {
+  try {
+    const [assetRows] = await pool.query(`
+      SELECT
+        COUNT(*) AS totalAssets
+      FROM assets
+    `)
+    const [accountRows] = await pool.query('SELECT COUNT(*) AS activeUsers FROM accounts WHERE active = TRUE')
+    const [metricRows] = await pool.query(
+      'SELECT metric_key, metric_value FROM system_metrics WHERE metric_key IN (?, ?)',
+      ['last_editor', 'last_edit_at', 'system_status'],
+    )
+    const metrics = Object.fromEntries(metricRows.map(metric => [metric.metric_key, metric.metric_value]))
+    res.json({
+      totalAssets: Number(assetRows[0].totalAssets),
+      activeUsers: Number(accountRows[0].activeUsers),
+      lastAudit: metrics.last_editor && metrics.last_edit_at && metrics.last_edit_at !== '—'
+        ? `${metrics.last_editor} • ${formatEditTimestamp(metrics.last_edit_at)}`
+        : metrics.last_editor ?? '—',
+      systemStatus: metrics.system_status ?? 'ONLINE',
+    })
+  } catch (error) {
+    console.error('Failed to fetch public dashboard metrics:', error)
+    res.status(500).json({ message: 'Failed to fetch dashboard metrics.' })
+  }
+})
+
+async function requireAccount(req, res, next) {
+  try {
+    const authorization = req.get('authorization') || ''
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
+    if (!token) return res.status(401).json({ message: 'Authentication required.' })
+
+    const [rows] = await pool.query(
+      `SELECT accounts.id, accounts.username, accounts.name, accounts.role
+       FROM account_sessions JOIN accounts ON accounts.id = account_sessions.account_id
+       WHERE account_sessions.token_hash = ? AND account_sessions.expires_at > NOW() AND accounts.active = TRUE`,
+      [hashToken(token)],
+    )
+    if (!rows[0]) return res.status(401).json({ message: 'Session expired or invalid.' })
+    req.account = rows[0]
+    next()
+  } catch (error) {
+    console.error('Authentication check failed:', error)
+    res.status(500).json({ message: 'Authentication service unavailable.' })
+  }
+}
+
+app.use('/api', requireAccount)
+
 app.get('/api/assets', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM assets ORDER BY id ASC')
@@ -121,19 +271,21 @@ app.get('/api/dashboard-stats', async (req, res) => {
   try {
     const [assetRows] = await pool.query(`
       SELECT
-        COUNT(*) AS totalAssets,
-        COUNT(DISTINCT NULLIF(TRIM(assignedTo), '')) AS activeUsers
+        COUNT(*) AS totalAssets
       FROM assets
     `)
+    const [accountRows] = await pool.query('SELECT COUNT(*) AS activeUsers FROM accounts WHERE active = TRUE')
     const [metricRows] = await pool.query(
       'SELECT metric_key, metric_value FROM system_metrics WHERE metric_key IN (?, ?)',
-      ['last_audit', 'system_status'],
+      ['last_editor', 'last_edit_at', 'system_status'],
     )
     const metrics = Object.fromEntries(metricRows.map(metric => [metric.metric_key, metric.metric_value]))
     res.json({
       totalAssets: Number(assetRows[0].totalAssets),
-      activeUsers: Number(assetRows[0].activeUsers),
-      lastAudit: metrics.last_audit ?? '—',
+      activeUsers: Number(accountRows[0].activeUsers),
+      lastAudit: metrics.last_editor && metrics.last_edit_at && metrics.last_edit_at !== '—'
+        ? `${metrics.last_editor} • ${formatEditTimestamp(metrics.last_edit_at)}`
+        : metrics.last_editor ?? '—',
       systemStatus: metrics.system_status ?? 'ONLINE',
     })
   } catch (error) {
@@ -183,6 +335,14 @@ app.post('/api/assets', async (req, res) => {
     ])
 
     await pool.query(sql, [values])
+    await pool.query(
+      'INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE metric_value = VALUES(metric_value)',
+      ['last_editor', req.account.username],
+    )
+    await pool.query(
+      "INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s')) ON DUPLICATE KEY UPDATE metric_value = VALUES(metric_value)",
+      ['last_edit_at'],
+    )
     res.json({ message: 'Assets saved successfully.' })
   } catch (error) {
     console.error('Failed to save assets:', error)

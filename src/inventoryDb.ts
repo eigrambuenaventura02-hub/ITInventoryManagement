@@ -1,5 +1,5 @@
 export type Category = 'Hardware' | 'Software' | 'License' | 'Network' | 'Mobile'
-export type Status = 'Active' | 'Maintenance' | 'Available' | 'Retired'
+export type Status = 'Active' | 'Maintenance' | 'Available' | 'Decommissioned'
 
 export interface Asset {
   id: string
@@ -33,7 +33,7 @@ export const DEFAULT_ASSETS: Asset[] = [
   { id: 'HW-0047', name: 'iPhone 15 Pro', category: 'Mobile', assignedTo: 'Jordan Kim', department: 'Executive', status: 'Active', location: 'Remote — LA', serial: 'IP15PNZK0034', purchaseDate: '2024-01-08', lastUpdated: '2026-07-22', cost: 999, vendor: 'Apple Inc.' },
   { id: 'HW-0048', name: 'Synology NAS DS923+', category: 'Hardware', assignedTo: null, department: 'IT', status: 'Maintenance', location: 'NYC HQ — Server Room', serial: 'SY9RL3VQ2201', purchaseDate: '2023-04-20', lastUpdated: '2026-08-01', cost: 1800, vendor: 'Synology' },
   { id: 'HW-0049', name: 'Logitech MX Keys S', category: 'Hardware', assignedTo: 'Tyler Brooks', department: 'Operations', status: 'Active', location: 'NYC HQ — Floor 2', serial: 'LG4XN8WZ0055', purchaseDate: '2025-01-15', lastUpdated: '2026-06-10', cost: 109, vendor: 'Logitech' },
-  { id: 'HW-0050', name: 'Dell Precision 5570', category: 'Hardware', assignedTo: null, department: null, status: 'Retired', location: 'NYC HQ — Storage', serial: 'DL2Q7YN4K011', purchaseDate: '2020-03-10', lastUpdated: '2026-02-28', cost: 2800, vendor: 'Dell Technologies' },
+  { id: 'HW-0050', name: 'Dell Precision 5570', category: 'Hardware', assignedTo: null, department: null, status: 'Decommissioned', location: 'NYC HQ — Storage', serial: 'DL2Q7YN4K011', purchaseDate: '2020-03-10', lastUpdated: '2026-02-28', cost: 2800, vendor: 'Dell Technologies' },
   { id: 'SW-0011', name: 'Adobe Creative Cloud', category: 'Software', assignedTo: 'Priya Nair', department: 'Design', status: 'Active', location: '—', serial: 'ADO-CC-7X4N-2024', purchaseDate: '2024-11-01', lastUpdated: '2026-07-01', cost: 659, vendor: 'Adobe Inc.' },
   { id: 'SW-0012', name: 'JetBrains All Products', category: 'Software', assignedTo: 'Sarah Chen', department: 'Engineering', status: 'Active', location: '—', serial: 'JB-ALL-EN-8814', purchaseDate: '2025-02-01', lastUpdated: '2026-07-01', cost: 779, vendor: 'JetBrains' },
   { id: 'SW-0013', name: 'Figma Organization', category: 'Software', assignedTo: null, department: 'Design', status: 'Active', location: '—', serial: 'FIG-ORG-2025-0112', purchaseDate: '2025-01-01', lastUpdated: '2026-07-01', cost: 4200, vendor: 'Figma, Inc.' },
@@ -44,10 +44,14 @@ export const DEFAULT_ASSETS: Asset[] = [
   { id: 'MOB-0007', name: 'iPad Pro 13in M4', category: 'Mobile', assignedTo: 'Marcus Webb', department: 'Sales', status: 'Active', location: 'Remote — Chicago', serial: 'IPAD13M4NZQ04', purchaseDate: '2024-09-20', lastUpdated: '2026-07-10', cost: 1299, vendor: 'Apple Inc.' },
 ]
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'https://itinventorymanagement-backend.onrender.com')
+
 async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url.startsWith('http') ? url : `https://itinventorymanagement-backend.onrender.com${url}`, {
+  const token = localStorage.getItem('inventory_account_token')
+  const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
     ...options,
@@ -57,6 +61,7 @@ async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T>
   const payload = text ? (JSON.parse(text) as T) : (null as T)
 
   if (!response.ok) {
+    if (response.status === 401) localStorage.removeItem('inventory_account_token')
     const message = payload && typeof payload === 'object' && 'message' in payload
       ? String((payload as { message?: string }).message)
       : 'Request to the inventory API failed.'
@@ -66,17 +71,37 @@ async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T>
   return payload
 }
 
+export async function login(username: string, password: string): Promise<{ name: string; role: string }> {
+  const payload = await apiRequest<{ token: string; user: { name: string; role: string } }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+  localStorage.setItem('inventory_account_token', payload.token)
+  return payload.user
+}
+
+export function logout(): void {
+  localStorage.removeItem('inventory_account_token')
+}
+
 export async function initializeInventoryDb(): Promise<Asset[]> {
   return getAllAssets()
 }
 
 export async function getAllAssets(): Promise<Asset[]> {
   const payload = await apiRequest<{ assets?: Asset[]; message?: string }>('/api/assets')
-  return payload.assets ?? []
+  return (payload.assets ?? []).map(asset => ({
+    ...asset,
+    status: (asset.status as string) === 'Retired' ? 'Decommissioned' : asset.status,
+  }))
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   return apiRequest<DashboardStats>('/api/dashboard-stats')
+}
+
+export async function getPublicDashboardStats(): Promise<DashboardStats> {
+  return apiRequest<DashboardStats>('/api/public-dashboard-stats')
 }
 
 export async function saveAssets(assets: Asset[]): Promise<void> {
